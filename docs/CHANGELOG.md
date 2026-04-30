@@ -3,6 +3,36 @@
 
 All notable changes to SelectPaper are documented in this file.
 
+## v17 — Margin Control Fix & Layout Adjustment
+
+### Fixed
+
+- Fixed issue where top margin could not be adjusted due to immutable constraints in refine prompt.
+- Removed margin values from IMMUTABLE rules while keeping page size fixed.
+- Prevented AI from ignoring user requests related to spacing adjustments.
+
+### Improved
+
+- Enabled direct control of top margin via `geometry` settings.
+- Improved separation between:
+  - page margin (`top`)
+  - header spacing (`includehead`, `headsep`)
+  - body offset (`\vspace*`)
+- Improved layout predictability when adjusting vertical spacing.
+
+### Added
+
+- Support for manual top margin adjustment (e.g. `top=67mm → top=18mm`).
+- Support for body start offset control using `\vspace*{}`.
+
+### Notes
+
+- Previous system locked both page size and margins, which caused layout requests (e.g. "reduce top space") to fail.
+- Layout control is now divided into:
+  - **Page size (immutable)**
+  - **Margins (adjustable)**
+  - **Content spacing (adjustable)**
+
 ---
 
 ## v16 — Output Stability & Page-Size Control
