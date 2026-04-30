@@ -662,3 +662,113 @@ Actual output: 105 × 150 mm
 5. v16 이후 안정 버전을 기준으로 v17 개발 시작하기
 - 
 - 실제 사용자 원고 입력에 가까운 구조로 전환
+
+---
+
+
+---
+
+## v17 — Margin Control Fix & Layout Behavior Analysis
+
+**Date**: 2026.04.30  
+**Version**: SelectPaper v17  
+**Focus**: 상단 여백 제어 및 레이아웃 파라미터 구조 분석
+
+### Goal
+
+페이지 상단 여백이 과도하게 발생하는 문제를 해결하고,  
+AI가 여백 수정 요청을 제대로 반영하지 못하는 구조적 원인을 분석 및 개선한다.
+
+---
+
+### Design Shift
+
+기존 시스템에서는 판형 안정성을 유지하기 위해  
+페이지 크기와 여백을 모두 IMMUTABLE로 고정했다.
+
+하지만 이 구조는 사용자 요청(예: "상단 여백 줄여줘")을  
+시스템적으로 무시하게 만드는 문제를 발생시켰다.
+
+v17에서는 다음과 같이 제어 구조를 재정의했다:
+
+- 판형 (paper size): 고정
+- 여백 (margin): 수정 가능
+- 콘텐츠 간격 (spacing): 수정 가능
+
+---
+
+### Changes
+
+- refine 프롬프트에서 margin 관련 IMMUTABLE 규칙 제거
+- page size와 margin을 분리된 제어 요소로 재구성
+- 상단 여백을 `geometry`의 `top` 값으로 직접 제어 가능하도록 변경
+- 본문 시작 위치를 `\vspace*{}`로 별도 제어 가능하게 유지
+- layout spacing 관련 프롬프트 가이드 수정
+
+---
+
+### Problem / Solution
+
+| Problem | Cause | Solution |
+|---|---|---|
+| 상단 여백이 과도하게 크게 생성됨 | `top=67mm` 고정값 사용 | `top` 값을 직접 수정 가능하도록 변경 |
+| 채팅에서 여백 수정 요청이 반영되지 않음 | margin이 IMMUTABLE로 잠겨 있음 | margin 제어를 unlock |
+| AI가 여백 대신 다른 값을 수정함 | `top` 변경이 불가능한 상태 | spacing과 margin 역할 분리 |
+| 헤더 위치가 비정상적으로 아래에 배치됨 | `includehead=true` + large top margin | top margin 감소로 해결 |
+
+---
+
+### System Analysis
+
+이 문제는 단순한 프롬프트 이해 문제가 아니라,  
+시스템 제약으로 인해 발생한 구조적 오류였다.
+
+기존 구조:
+
+    [IMMUTABLE]
+    - page size
+    - margin
+
+이 상태에서는 AI가 어떤 요청을 받아도:
+
+- top margin 수정 불가
+- 대신 headsep / vspace 등 다른 값 수정
+
+즉, 잘못된 파라미터를 건드리는 오류가 발생했다.
+
+---
+
+### Layout Logic Clarification
+
+현재 레이아웃 구조:
+
+    top margin (geometry)
+    ↓
+    header (includehead)
+    ↓
+    body start (\vspace*)
+    ↓
+    main text
+
+따라서:
+
+- 상단 여백 = `top`
+- 헤더-본문 간격 = `\vspace*{}`
+- headsep은 거의 영향 없음 (현재 구조 기준)
+
+---
+
+### Impact
+
+- 사용자 여백 제어 요청이 정상적으로 반영됨
+- 레이아웃 파라미터의 역할이 명확히 분리됨
+- AI 출력의 예측 가능성 증가
+- "말은 이해하는데 결과가 이상한" 문제 해결
+
+---
+
+### Notes
+
+- 이전 버전(v16)의 안정성 확보 과정에서 margin까지 잠긴 것이 문제의 원인
+- v17은 편집 제어 가능성 복구 버전
+- 이후 단계에서는 UI에서 margin 조정 기능을 제공하는 것이 필요함
