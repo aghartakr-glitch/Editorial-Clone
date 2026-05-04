@@ -772,3 +772,285 @@ v17에서는 다음과 같이 제어 구조를 재정의했다:
 - 이전 버전(v16)의 안정성 확보 과정에서 margin까지 잠긴 것이 문제의 원인
 - v17은 편집 제어 가능성 복구 버전
 - 이후 단계에서는 UI에서 margin 조정 기능을 제공하는 것이 필요함
+
+- ---
+
+## v18 — Typography Base Integration
+
+**Date**: 2026.04.30  
+**Version**: SelectPaper v18  
+**Focus**: 타이포그래피 기초 규칙 시스템 내장
+
+### Goal
+
+AI가 기본적인 타이포그래피 원칙을 무시하지 않도록  
+최소한의 기초 규칙을 시스템 레벨에서 강제한다.
+
+---
+
+### Design Shift
+
+기존에는 LaTeX 생성 시 AI가 타이포그래피 판단을 직접 수행했다.
+
+v18에서는 이를 변경하여:
+
+- 타이포그래피 기본 규칙을 JS 상수(TYPO_BASE)로 내장
+- AI는 그 위에서만 생성하도록 제한
+
+---
+
+### Changes
+
+- TYPO_BASE 상수 추가 (행간, 면주 크기, 가변단 규칙 등)
+- 글자 크기별 행간 자동 계산 함수 적용
+- 판형 대비 면주 크기 자동 계산
+- 구분선 제거 규칙 강화
+- 텍스트 박스 사용 규칙 추가 (중앙 정렬 필수)
+- 가변단 조합 (5단 → 3+2 / 4+1 등) 지원
+
+---
+
+### Impact
+
+- 기본 타이포 오류 감소
+- 슬기와민 스타일의 “기초 안정성” 확보
+- 토큰 사용 없이 품질 유지 (rule hardcoding)
+
+---
+
+## v19 — Semantic Matching Pipeline
+
+**Date**: 2026.04.30  
+**Version**: SelectPaper v19  
+**Focus**: 의미 기반 추천 시스템 구축
+
+### Goal
+
+단순 키워드 매칭이 아니라  
+텍스트 의미와 디자인 의도를 기반으로 레퍼런스를 선택한다.
+
+---
+
+### Design Shift
+
+기존:
+
+    keyword → top1 → LaTeX → semantic (후처리)
+
+v19:
+
+    analyzeText → keyword top20 → semantic rerank → LaTeX
+
+---
+
+### Changes
+
+- analyzeText() 추가 (텍스트 구조 8개 항목 추출)
+- semanticRerank() 추가 (top20 → 최종 1)
+- scoreKw 개선 (summary, layout, why_* 반영)
+- structuredReason 출력 구조 추가
+- pipeline 재구성 (semantic을 foreground로 이동)
+
+---
+
+### Problem
+
+- semantic rerank 이후 LaTeX 재생성 없음 → drift 발생
+- 키워드 seed bias 여전히 존재
+
+---
+
+### Impact
+
+- recommendation과 결과물 연결 강화
+- 시스템이 “디자인 추천 시스템”으로 정의됨
+
+---
+
+## v20 — Pipeline Stabilization & Data Integration
+
+**Date**: 2026.04.30  
+**Version**: SelectPaper v20  
+**Focus**: DB 기반 추천 정확도 향상
+
+---
+
+### Goal
+
+Google Sheet 기반 디자인 DB의 “의도 데이터”를  
+추천 로직에 직접 반영한다.
+
+---
+
+### Design Shift
+
+기존:
+
+- 장르 / 키워드 중심 매칭
+
+v20:
+
+- 내용 요약 / 여백 의도 / 레이아웃 특징 중심 매칭
+
+---
+
+### Changes
+
+- scoreKw → multi-field scoring 구조
+- semanticRerank에 디자인 의도 필드 포함
+- 후보 선택 구조 변경:
+
+    top20 → semantic → top4 → final
+
+- structuredReason 상세화
+- textProfile 기반 보정 적용
+
+---
+
+### Impact
+
+- 디자인 “왜”를 반영한 추천 가능
+- DB 활용도가 크게 증가
+
+---
+
+## v21 — Layout Stability & Token Optimization
+
+**Date**: 2026.05.01  
+**Version**: SelectPaper v21  
+**Focus**: 레이아웃 안정화 및 토큰 절감
+
+---
+
+### Goal
+
+조판 오류(헤더 잘림, 줄나눔 문제)를 해결하고  
+프롬프트 비용을 줄인다.
+
+---
+
+### Changes
+
+#### Layout Fix
+
+- includehead=true 적용
+- \headheight 명시
+- \headsep 고정
+
+#### Line-breaking Fix
+
+- \tolerance=9999 제거 → 400 적용
+- widow/orphan penalty 추가
+- emergencystretch fallback 유지
+
+#### Token Optimization
+
+- latexPrompt 구조 압축
+- preambleSummary 축소
+- analyzeText 스키마 압축
+- verbatim 규칙 제거
+
+→ 약 **300 토큰/회 절감**
+
+---
+
+### Impact
+
+- 레이아웃 안정성 확보
+- 비용 효율 개선
+- 출력 예측 가능성 증가
+
+---
+
+## v22 — Korean Typesetting Engine & Style Composition
+
+**Date**: 2026.05.01  
+**Version**: SelectPaper v22  
+**Focus**: 한글 조판 엔진 개선 + 스타일 합성 구조
+
+---
+
+### Goal
+
+한글 조판 품질을 근본적으로 개선하고  
+단일 레퍼런스 복사 구조를 탈피한다.
+
+---
+
+### Design Shift
+
+기존:
+
+    single reference → 전체 스타일 복사
+
+v22:
+
+    top4 references → 속성별 선택 → styleSpec 구성
+
+---
+
+### Changes
+
+#### Korean Typesetting
+
+- HANGUL_LINEBREAK_SKIP 도입
+- \sloppy / \tolerance=9999 완전 제거
+- hyphenation 완전 차단
+- cleanKoreanHyphenation() 후처리 추가
+- chooseAlignmentPolicy() → ragged fallback
+
+#### Layout Quality
+
+- line-level orphan 완화
+- preview에서도 keep-all 적용
+
+#### Style Composition
+
+- semanticRerank → top4 반환
+- composeStyleSpec() 추가
+- 속성별 스타일 선택 구조 도입
+    - page / margin / column / typography / folio 분리
+- confidence 기반 fallback
+
+#### Data Audit
+
+- DB source: 하드코딩 :contentReference[oaicite:0]{index=0}  
+- DB count: 254
+- 슬기와민 관련 데이터 다수 포함
+- Google Sheet 미연동 상태
+
+#### Token Optimization
+
+- 중복 규칙 제거
+- 후보 정보 압축
+- promptGuard 최소화
+
+→ 약 **350 토큰/회 절감**
+
+---
+
+### Impact
+
+- 한글 조판 품질 대폭 개선
+- 스타일 “클론 문제” 해결
+- 시스템이 단순 추천 → **편집 엔진**으로 전환
+
+---
+
+## Overall Evolution (v18–v22)
+
+```
+TYPO BASE (v18)
+→ SEMANTIC SYSTEM (v19)
+→ DATA-DRIVEN MATCHING (v20)
+→ LAYOUT STABILITY (v21)
+→ KOREAN TYPE ENGINE + STYLE COMPOSITION (v22)
+```
+
+---
+
+### 핵심 변화 요약
+
+- 규칙 → 의미 → 데이터 → 안정성 → 조판 엔진
+- “예쁜 결과 생성” → “편집 디자인 시스템”
+
