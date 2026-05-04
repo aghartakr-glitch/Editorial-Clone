@@ -3,6 +3,151 @@
 
 All notable changes to SelectPaper are documented in this file.
 
+## v22 — Korean Typesetting Engine & Style Composition
+
+### Added
+
+- Added Korean-aware line breaking system using `HANGUL_LINEBREAK_SKIP`.
+- Added `chooseAlignmentPolicy()` for automatic justify/ragged fallback.
+- Added `cleanKoreanHyphenation()` post-processing to remove invalid Hangul hyphenation.
+- Added `composeStyleSpec()` for attribute-based style composition.
+- Extended `semanticRerank()` to return top 4 candidates instead of a single result.
+- Added data audit utility to inspect DB source, fields, and Sulki & Min coverage.
+
+### Changed
+
+- Replaced single-reference cloning with multi-reference style composition:
+  - page / margin / column / typography / folio now selected independently.
+- Reworked LaTeX prompt to enforce Korean typesetting rules:
+  - no hyphenation
+  - conservative linebreak glue
+  - ragged fallback for narrow columns
+- Updated preview rendering:
+  - `textAlign` now follows alignment policy
+  - `wordBreak: keep-all`, `hyphens: none`
+
+### Improved
+
+- Prevented excessive spacing in justified Korean text.
+- Eliminated use of `\sloppy` and `\tolerance=9999`.
+- Improved line-level orphan control (not just page-level).
+- Reduced prompt size and removed duplicated rules.
+
+### Fixed
+
+- Fixed issue where Hangul justification caused uneven spacing.
+- Fixed unwanted hyphen insertion inside Korean words.
+- Fixed cases where one or two syllables were isolated at line edges.
+
+### Notes
+
+- DB source is currently hardcoded (not directly connected to Google Sheet).
+- Approximately 254 entries available, including significant Sulki & Min-related data.
+- Token usage reduced by ~350 tokens per generation cycle.
+
+---
+
+## v21 — Layout Stability & Token Optimization
+
+### Fixed
+
+- Fixed header clipping and page number overflow issues.
+- Ensured header area is included in geometry calculations using `includehead=true`.
+- Explicitly defined `\headheight` to prevent overflow.
+- Fixed inconsistent spacing between header and body.
+
+### Improved
+
+- Improved Korean line-breaking quality by removing `\tolerance=9999`.
+- Applied strict widow/orphan penalties:
+  - `\widowpenalty`, `\clubpenalty`, `\displaywidowpenalty`, `\brokenpenalty`
+- Reduced LaTeX prompt verbosity and removed redundant sections.
+
+### Changed
+
+- Replaced loose line-breaking settings with:
+  - `\pretolerance=100`
+  - `\tolerance=400`
+  - `\emergencystretch=3em` (fallback only)
+
+### Performance
+
+- Reduced token usage by approximately 300 tokens per request.
+
+---
+
+## v20 — Pipeline Stabilization & Data Integration
+
+### Added
+
+- Added multi-field scoring system based on:
+  - summary
+  - layout features
+  - typography rationale
+  - margin intention
+- Integrated design-intent fields from database into recommendation pipeline.
+
+### Changed
+
+- Replaced simple keyword matching with enriched scoring model.
+- Improved semantic reranking with structured reasoning.
+- Updated pipeline:
+  - analyzeText → keyword top20 → semantic rerank → LaTeX generation
+
+### Improved
+
+- Improved alignment between recommended design and generated layout.
+- Increased relevance of selected references based on actual editorial intent.
+
+---
+
+## v19 — Semantic Matching Pipeline
+
+### Added
+
+- Added `analyzeText()` to extract structured text profile.
+- Added `semanticRerank()` to refine candidate selection.
+- Added structured rationale output for recommendations.
+
+### Changed
+
+- Moved semantic matching from background to main pipeline.
+- Updated scoring logic:
+  - reduced genre bias
+  - increased weight on summary, layout, and typography fields
+
+### Improved
+
+- Improved recommendation accuracy beyond keyword matching.
+- Enabled explainable design selection.
+
+---
+
+## v18 — Typography Base Integration
+
+### Added
+
+- Added TYPO_BASE system for core typography rules.
+- Added font-size-based leading calculation.
+- Added page-size-based running head sizing.
+- Added column combination logic (e.g. 5 → 3+2 / 4+1).
+- Added rules for text boxes and prohibition of divider lines.
+
+### Changed
+
+- Moved typography decision logic from AI to system-level constants.
+- Reduced dependency on prompt-based typography reasoning.
+
+### Improved
+
+- Prevented basic typography errors (leading, spacing, layout misuse).
+- Maintained output quality without increasing token usage.
+
+### Notes
+
+- TYPO_BASE acts as a guardrail, not a full design generator.
+- Only essential rules are passed to the model to minimize token cost.
+
 ## v17 — Margin Control Fix & Layout Adjustment
 
 ### Fixed
