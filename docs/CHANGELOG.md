@@ -148,6 +148,8 @@ All notable changes to SelectPaper are documented in this file.
 - TYPO_BASE acts as a guardrail, not a full design generator.
 - Only essential rules are passed to the model to minimize token cost.
 
+---
+
 ## v17 — Margin Control Fix & Layout Adjustment
 
 ### Fixed
