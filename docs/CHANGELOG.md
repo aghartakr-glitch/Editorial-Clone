@@ -3,6 +3,116 @@
 
 All notable changes to SelectPaper are documented in this file.
 
+## v25 — Heading Typography System & Prompt Compression
+
+### Added
+
+- Added heading typography system based on `TYPO_BASE.headingSizes()`.
+- Added generated LaTeX heading commands:
+  - `\hone` for main titles
+  - `\htwo` for subtitles / chapter headings
+  - `\hthree` for section headings
+- Added `TYPO_BASE.leadingTable()` to guide heading leading values.
+- Added mandatory heading typography instructions to the LaTeX prompt.
+
+### Changed
+
+- Moved heading size and leading decisions from AI guesswork to JavaScript-calculated values.
+- Updated LaTeX prompt so larger text elements cannot reuse body leading.
+- Reduced semantic rerank candidates from 12 to 8 to lower token usage.
+- Shortened candidate summaries and design-feature snippets sent to semantic rerank.
+- Compressed `RULES` and `preambleSummary` sections.
+
+### Improved
+
+- Improved title, subtitle, and section heading spacing.
+- Reduced cases where headings appeared too tight or visually compressed.
+- Improved hierarchy consistency between body text and headings.
+- Reduced unnecessary prompt tokens while keeping key typography constraints.
+
+### Performance
+
+- Estimated net token reduction: approximately 260 tokens per generation cycle.
+- Reduced semantic rerank input size without removing core matching fields.
+
+### Notes
+
+- v25 focuses on typographic hierarchy stability, not visual style expansion.
+- The main design goal is to prevent basic heading/leading errors while preserving the existing SelectPaper pipeline.
+
+---
+
+## v24 — Running Head Fix & Multi-Column Body Size Correction
+
+### Fixed
+
+- Fixed issue where DB `running` values such as `8pt`, `10pt`, or `10.5pt` were passed as visible running head text.
+- Updated LaTeX generation to use the user-provided `fields.면주` value instead of DB `p.running`.
+- Updated refine prompt so running head text also comes from `fields.면주`.
+- Prevented unwanted metadata-like text from appearing in the running head area.
+
+### Added
+
+- Added automatic body-size correction for multi-column layouts.
+- Added adjusted body-size state for UI display.
+- Added visual indication when body size has been reduced due to column count.
+
+### Changed
+
+- Body size is now adjusted based on effective column count:
+  - 2–3 columns: reduce body size by 0.5pt
+  - 4+ columns: reduce body size by 1.0pt
+  - minimum body size: 7pt
+- Leading is recalculated after body-size correction.
+- Preamble, preamble summary, and LaTeX prompt now use the corrected body size and leading.
+
+### Improved
+
+- Improved readability in narrow multi-column layouts.
+- Reduced cases where only 8–9 Hangul characters fit per line before wrapping.
+- Made dense layouts more appropriate for long-form Korean body text.
+- Improved UI transparency by showing when body-size correction has been applied.
+
+### Notes
+
+- v24 addresses a practical typesetting bug: DB metadata should not be treated as user-visible text.
+- The version also begins correcting layout behavior based on column density.
+
+---
+
+## v23 — Handoff Baseline & Pipeline Audit
+
+### Added
+
+- Added handoff baseline for continuing development from the current SelectPaper architecture.
+- Documented current pipeline state:
+  - `analyzeText`
+  - `scoreKw`
+  - `semanticRerank`
+  - `applyTextCorrections`
+  - LaTeX generation
+  - `generateRationale`
+- Documented remaining technical tasks for the next versions.
+
+### Confirmed
+
+- Confirmed that the system uses a hardcoded editorial design DB rather than a live Google Sheet connection.
+- Confirmed that the recommendation pipeline uses both keyword scoring and semantic reranking.
+- Confirmed that the LaTeX generation flow still depends on a fixed preamble + body-only generation structure.
+
+### Known Issues
+
+- Running head metadata could still be passed as visible running head text.
+- Semantic rerank and LaTeX generation could still drift if the selected reference changes after generation.
+- Font file mapping still required more precise handling.
+- TYPO_BASE values still needed further updates for heading and hierarchy control.
+- Refine flow still needed a stronger preamble reinsertion strategy.
+
+### Notes
+
+- v23 functions as the checkpoint version before targeted typography and layout fixes.
+- The version clarified what should be fixed in v24 and v25 rather than introducing a major new system layer.
+
 ## v22 — Korean Typesetting Engine & Style Composition
 
 ### Added
