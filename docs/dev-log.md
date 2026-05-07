@@ -1056,6 +1056,8 @@ TYPO BASE (v18)
 
 ---
 
+---
+
 ## v23 — Handoff Baseline & Pipeline Audit
 
 **Date**: 2026.05.06  
@@ -1064,15 +1066,13 @@ TYPO BASE (v18)
 
 ### Goal
 
-v23은 새로운 기능 확장보다, 현재 SelectPaper가 어떤 구조로 작동하는지 확인하고 다음 개발 단계에서 수정해야 할 문제를 정리하는 기준 버전이다.
+v23은 새로운 기능 추가보다, 현재 SelectPaper 구조를 정확히 점검하고 이후 수정 방향을 정리하기 위한 handoff 기준 버전이다.
 
-이 시점의 시스템은 253~254개 내외의 편집 디자인 DB를 기반으로 입력 텍스트를 분석하고, 의미 기반 후보 재정렬을 거쳐 XeLaTeX 결과물을 생성하는 구조다.
+이 시점의 시스템은 약 253~254개 편집 디자인 DB를 기반으로 입력 텍스트를 분석하고, 의미 기반 후보 재정렬을 거쳐 XeLaTeX 결과물을 생성하는 구조다.
 
 ---
 
 ### Current Pipeline
-
-v23 기준 파이프라인은 다음과 같다.
 
 ```text
 analyzeText
@@ -1086,3 +1086,294 @@ applyTextCorrections
 LaTeX generation
 ↓
 generateRationale
+```
+
+---
+
+### System Status
+
+- DB는 Google Sheet 실시간 연동이 아니라 코드 내부 하드코딩 구조로 사용됨
+- 추천은 keyword scoring과 semantic rerank가 결합된 hybrid 방식
+- LaTeX 생성은 fixed preamble + body-only generation 구조 유지
+- typography guard는 기본적인 조판 오류를 막는 보조 장치로 사용
+- semantic rerank는 추천 정확도를 높이지만, LaTeX 생성 기준과 완전히 동기화되어 있지는 않음
+
+---
+
+### Remaining Issues
+
+| Issue | Description |
+|---|---|
+| Font mapping | DB의 서체명을 실제 Overleaf / XeLaTeX 폰트 파일명으로 더 정교하게 매핑해야 함 |
+| Semantic drift | semantic rerank 결과와 실제 LaTeX 생성 기준 레퍼런스가 어긋날 가능성이 있음 |
+| TYPO_BASE update | 본문 중심 규칙은 있으나 제목/소제목/섹션 heading 수치 체계가 부족함 |
+| Refine stability | refine 후 preamble을 안정적으로 다시 삽입하는 구조가 더 필요함 |
+| Running head bug | DB의 `running` 값이 면주 텍스트처럼 전달될 위험이 있음 |
+
+---
+
+### Impact
+
+v23은 기능적으로 가장 완성된 버전이라기보다, 이후 수정의 기준점이다.
+
+이 버전에서 중요한 점은 문제를 새 기능 부족이 아니라 **파이프라인 동기화와 조판 안정성 문제**로 정의했다는 것이다.
+
+---
+
+### Next Goals
+
+1. 면주 텍스트와 DB running-size metadata 분리
+2. 다단 레이아웃에서 본문 글자 크기 자동 보정
+3. heading hierarchy의 글자 크기와 행간을 시스템에서 계산
+4. semantic rerank와 LaTeX 생성 기준 일치
+5. refine 이후 preamble 안정성 개선
+
+---
+
+## v24 — Running Head Fix & Multi-Column Body Size Correction
+
+**Date**: 2026.05.06  
+**Version**: SelectPaper v24  
+**Focus**: 면주 텍스트 오류 수정 및 다단 조판 가독성 개선
+
+### Goal
+
+v24의 목표는 두 가지다.
+
+첫째, DB의 `running` 값을 실제 면주 텍스트처럼 사용하던 문제를 제거한다.  
+둘째, 다단 레이아웃에서 본문 글자가 너무 크거나 줄 길이가 지나치게 짧아지는 문제를 완화한다.
+
+---
+
+### Problem
+
+v23까지는 DB의 `running` 필드가 면주 텍스트로 전달될 수 있었다.
+
+하지만 이 필드는 실제 면주 내용이 아니라 `8pt`, `10pt`, `10.5pt` 같은 크기 정보에 가까웠다.
+
+그 결과 사용자가 입력하지 않은 숫자나 크기 정보가 면주 영역에 나타날 수 있었다.
+
+---
+
+### Changes
+
+#### Running Head Source Fix
+
+기존 구조:
+
+```text
+running text = p.running
+```
+
+변경 후:
+
+```text
+running text = fields.면주
+```
+
+즉, DB의 `running` 값은 더 이상 사용자-visible 면주 텍스트로 사용하지 않는다.
+
+사용자가 면주를 입력한 경우에만 `fields.면주`가 LaTeX prompt와 refine prompt에 전달된다.
+
+---
+
+#### Multi-Column Body Size Correction
+
+다단 레이아웃에서는 한 줄에 들어가는 글자 수가 급격히 줄어든다.
+
+특히 3단 이상에서는 본문 글자 크기가 그대로 유지될 경우, 한 줄에 8~9글자만 들어가고 바로 다음 줄로 넘어가는 문제가 생길 수 있다.
+
+v24에서는 단 수에 따라 본문 크기를 자동 보정한다.
+
+```text
+2–3 columns → body size -0.5pt
+4+ columns → body size -1.0pt
+minimum body size → 7pt
+```
+
+보정 후에는 새 본문 크기를 기준으로 행간도 다시 계산한다.
+
+---
+
+### Design Reasoning
+
+다단 레이아웃은 단이 많아질수록 판면이 더 세밀해지지만, 그만큼 한 단의 폭은 좁아진다.
+
+따라서 단 수가 늘어났는데 본문 크기를 그대로 유지하면 판독성이 떨어지고, 줄바꿈이 과도하게 자주 발생한다.
+
+v24의 보정은 실험적 레이아웃을 막는 것이 아니라, 다단 구조 안에서 본문이 최소한 읽을 수 있는 상태를 유지하게 하는 안전장치다.
+
+---
+
+### UI Improvement
+
+다단 보정이 발생한 경우, UI에서 보정된 본문 크기를 표시하도록 했다.
+
+예:
+
+```text
+8.5pt↓
+```
+
+이를 통해 사용자는 DB 원본값과 실제 적용값이 다를 수 있음을 확인할 수 있다.
+
+---
+
+### Impact
+
+- 면주 영역에 잘못된 크기 정보가 출력되는 문제 해결
+- 다단 레이아웃의 본문 가독성 개선
+- 좁은 단에서 과도한 줄바꿈 완화
+- 사용자 입력값과 DB metadata의 역할 분리
+- 조판 결과의 예측 가능성 증가
+
+---
+
+### Notes
+
+v24는 디자인 스타일을 확장한 버전이 아니라, 입력 데이터의 의미를 정확히 분리하고, 다단 조판의 기본 가독성을 확보한 안정화 버전이다.
+
+---
+
+## v25 — Heading Typography System & Prompt Compression
+
+**Date**: 2026.05.06  
+**Version**: SelectPaper v25  
+**Focus**: 제목 위계 행간 안정화 및 토큰 절감
+
+### Goal
+
+v25의 목표는 제목, 소제목, 섹션 제목의 크기와 행간을 AI가 임의로 결정하지 않도록 하고, 동시에 LaTeX prompt의 토큰 사용량을 줄이는 것이다.
+
+v24까지는 본문 크기와 행간은 비교적 안정적으로 계산되었지만, 제목과 소제목의 행간은 AI가 상황에 따라 좁게 만들거나 불균일하게 처리할 수 있었다.
+
+---
+
+### Problem
+
+기존 구조에서는 본문 typography는 시스템에서 계산했지만, 제목 계층은 충분히 고정되어 있지 않았다.
+
+그 결과 다음 문제가 발생할 수 있었다.
+
+- 제목 크기에 비해 행간이 너무 좁음
+- 소제목과 본문 사이의 위계가 불명확함
+- body leading이 제목에 그대로 적용됨
+- AI가 `\fontsize{X}{Y}`를 임의로 생성하면서 수직 리듬이 흔들림
+
+---
+
+### Changes
+
+#### Heading Size Calculation
+
+`TYPO_BASE`에 `headingSizes()` 함수를 추가했다.
+
+본문 크기를 기준으로 제목 위계를 계산한다.
+
+```text
+h3 = body × 1.2
+h2 = body × 1.6
+h1 = body × 2.2
+```
+
+각 크기는 0.5pt 단위로 반올림된다.
+
+---
+
+#### Heading Leading Table
+
+`leadingTable()`을 추가해 7pt부터 36pt까지의 크기에 대해 적절한 행간 값을 안내하도록 했다.
+
+이 조견표는 LaTeX prompt에 전달되어, AI가 custom `\fontsize{X}{Y}`를 사용할 경우에도 적절한 `Y` 값을 선택하도록 유도한다.
+
+---
+
+#### Heading Commands
+
+계산된 heading 값을 preamble에 명령어로 정의한다.
+
+```latex
+\newcommand{\hone}{...}   % main title
+\newcommand{\htwo}{...}   % subtitle / chapter
+\newcommand{\hthree}{...} % section head
+```
+
+LaTeX prompt에는 이 명령어를 사용하도록 지시한다.
+
+---
+
+### Prompt Optimization
+
+v25에서는 heading typography 섹션이 새로 추가되었지만, 동시에 다른 prompt 영역을 압축했다.
+
+변경 사항:
+
+| Area | Change |
+|---|---|
+| semantic rerank | 후보 12개 → 8개 |
+| candidate text | summary / layout feature / why fields 길이 축소 |
+| RULES section | 긴 문장을 짧은 명령형으로 압축 |
+| preambleSummary | body/fn 중복 정보 제거 |
+| heading typography | 새로 추가되었지만 핵심 수치만 전달 |
+
+결과적으로 전체 LaTeX 호출 기준 약 260 tokens 내외의 net reduction이 발생한다.
+
+---
+
+### Design Reasoning
+
+v25의 핵심은 “AI가 더 많이 판단하게 하기”가 아니라, AI가 자주 틀리는 기본 타이포 위계를 시스템에서 미리 계산하는 것이다.
+
+제목과 본문 사이의 위계는 디자인적으로 자유롭게 보일 수 있지만, 최소한의 행간과 크기 비례가 무너지면 결과물 전체가 미숙해 보인다.
+
+따라서 v25는 창의적 스타일보다 **기본 조판 안정성**을 우선한다.
+
+---
+
+### Impact
+
+- 제목/소제목/섹션 제목의 행간 안정화
+- 본문 leading이 제목에 잘못 적용되는 문제 감소
+- 타이포그래피 위계가 더 일관되게 유지됨
+- LaTeX prompt가 짧아져 비용과 속도 개선
+- AI의 임의 수치 결정 영역 축소
+- TYPO_BASE가 본문뿐 아니라 heading hierarchy까지 확장됨
+
+---
+
+### Notes
+
+v25는 v24의 다단 본문 크기 보정을 유지하면서, 그 위에 제목 위계 시스템을 추가한 버전이다.
+
+즉, v24가 본문 가독성 안정화라면, v25는 제목과 본문 사이의 관계를 안정화한 버전이다.
+
+---
+
+## Overall Evolution (v23–v25)
+
+```text
+v23
+handoff baseline / pipeline audit
+
+→ v24
+running head source fix / multi-column body correction
+
+→ v25
+heading hierarchy system / prompt compression
+```
+
+### 핵심 변화 요약
+
+- v23: 현재 구조와 문제를 정리한 기준 버전
+- v24: 면주 오류와 다단 본문 가독성 문제 해결
+- v25: 제목 위계와 행간을 시스템화하고 토큰 사용량 절감
+
+### Design Direction
+
+v23–v25의 흐름은 새로운 시각 효과를 늘리는 방향이 아니라, 기존 SelectPaper가 더 안정적인 편집 조판 시스템이 되도록 기본 오류를 줄이는 방향이다.
+
+```text
+style generation
+→ typesetting stability
+→ typography hierarchy control
+```
