@@ -113,6 +113,8 @@ All notable changes to SelectPaper are documented in this file.
 - v23 functions as the checkpoint version before targeted typography and layout fixes.
 - The version clarified what should be fixed in v24 and v25 rather than introducing a major new system layer.
 
+---
+
 ## v22 — Korean Typesetting Engine & Style Composition
 
 ### Added
