@@ -1054,3 +1054,35 @@ TYPO BASE (v18)
 - 규칙 → 의미 → 데이터 → 안정성 → 조판 엔진
 - “예쁜 결과 생성” → “편집 디자인 시스템”
 
+---
+
+## v23 — Handoff Baseline & Pipeline Audit
+
+**Date**: 2026.05.06  
+**Version**: SelectPaper v23  
+**Focus**: 현재 파이프라인 상태 점검 및 다음 수정 과제 정리
+
+### Goal
+
+v23은 새로운 기능 확장보다, 현재 SelectPaper가 어떤 구조로 작동하는지 확인하고 다음 개발 단계에서 수정해야 할 문제를 정리하는 기준 버전이다.
+
+이 시점의 시스템은 253~254개 내외의 편집 디자인 DB를 기반으로 입력 텍스트를 분석하고, 의미 기반 후보 재정렬을 거쳐 XeLaTeX 결과물을 생성하는 구조다.
+
+---
+
+### Current Pipeline
+
+v23 기준 파이프라인은 다음과 같다.
+
+```text
+analyzeText
+↓
+scoreKw
+↓
+semanticRerank
+↓
+applyTextCorrections
+↓
+LaTeX generation
+↓
+generateRationale
