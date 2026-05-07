@@ -3,6 +3,53 @@
 
 All notable changes to SelectPaper are documented in this file.
 
+## v27 — Genre Hint Priority & Mixed Typeface Stabilization
+
+### Added
+
+- Added genre-first filtering when the user explicitly selects a genre.
+- Added `hint` parameter to `semanticRerank()`.
+- Added separate behavior for:
+  - automatic genre detection
+  - user-selected genre mode
+- Added publication-type-aware genre pool filtering.
+- Added font-family switching directly inside heading commands for mixed typeface layouts.
+- Added `\bodyf` command to return from heading font to body font.
+
+### Changed
+
+- Changed genre hint behavior from score bonus to candidate pool filtering.
+- Updated `run()` pipeline so selected genre is applied before content scoring.
+- Updated `semanticRerank()` so it knows whether candidates were selected from a user-chosen genre.
+- Removed genre hint scoring responsibility from `scoreKw()`.
+- Updated heading typography commands so mixed serif/sans-serif layouts do not rely on AI inserting `\sffamily` manually.
+
+### Improved
+
+- Improved consistency between user-selected genre and generated style.
+- Improved distinction between automatic genre detection and manual genre selection.
+- Improved literature-category behavior by preventing content matching from overriding the selected genre too easily.
+- Improved mixed typeface layouts:
+  - serif body
+  - sans-serif headings
+- Improved heading command reliability in LaTeX output.
+
+### Fixed
+
+- Fixed issue where user-selected genre could be overridden by content-based semantic matching.
+- Fixed issue where genre bonus was too weak compared to content matching scores.
+- Fixed issue where `semanticRerank()` did not know the selected genre.
+- Fixed issue where mixed serif/sans-serif layouts required the AI to manually insert font switching commands.
+- Fixed potential inconsistency between heading font and body font in mixed typeface layouts.
+
+### Notes
+
+- When no genre is selected, the system still uses content-based automatic genre detection.
+- When a genre is selected, the system prioritizes that genre first, then selects the best reference within that genre pool.
+- v27 clarifies the difference between “automatic recommendation” and “user-directed style selection.”
+
+---
+
 ## v26 — Context-Based Genre Detection & Layout Safety Fix
 
 ### Added
