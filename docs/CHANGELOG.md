@@ -3,6 +3,49 @@
 
 All notable changes to SelectPaper are documented in this file.
 
+---
+
+## v28 — Code Audit & Pipeline Consistency Fix
+
+### Added
+
+- Added `appliedMargins` state to store the actual corrected margin values used during generation.
+- Added refine support for using corrected margins instead of raw DB margin values.
+
+### Changed
+
+- Changed `analyzeText()` input slice from 300 characters to 200 characters to match the documented handoff behavior.
+- Changed refine prompt tolerance from `\tolerance=9999` to `\tolerance=400`.
+- Changed refine margin references from raw DB values to applied corrected margin values.
+- Simplified genre state management by removing duplicated `hintState`.
+
+### Improved
+
+- Improved consistency between documentation and implementation.
+- Improved consistency between preamble typesetting rules and refine prompt rules.
+- Improved maintainability by removing unused code.
+- Improved typography guard behavior by sending all `promptGuard` items instead of only the first three.
+- Improved refinement accuracy by using the same margin values that were actually applied during generation.
+
+### Fixed
+
+- Fixed duplicate `colSetupBlock` assignment.
+- Fixed missing closing brace in the `userOverride` conditional block.
+- Fixed unused `GENRE_PUB_PREF` dead code.
+- Fixed unused `footnoteBlock` dead code.
+- Fixed duplicated `hint` / `hintState` state structure.
+- Fixed mismatch between handoff notes and actual `analyzeText()` slice length.
+- Fixed conflict between strict Korean typesetting settings and refine prompt overflow guidance.
+- Fixed refine prompt using original DB margins instead of corrected applied margins.
+
+### Notes
+
+- v28 does not introduce a new design system layer.
+- This version is a cleanup and audit release focused on correcting missed implementation details from earlier versions.
+- `semanticRerank()` still uses a longer text slice than `analyzeText()` because reranking requires more context.
+
+---
+
 ## v27 — Genre Hint Priority & Mixed Typeface Stabilization
 
 ### Added
