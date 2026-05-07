@@ -1813,3 +1813,213 @@ v27은 장르 판단을 더 강하게 자동화한 버전이 아니라, 자동 �
 반대로 사용자가 장르를 선택한 경우에는, 그 선택을 단순 참고가 아니라 스타일 방향을 결정하는 제약 조건으로 사용한다.
 
 이 변화는 추천 시스템의 자율성과 사용자의 의도 반영 사이의 균형을 맞추기 위한 것이다.
+
+---
+
+---
+
+## v28 — Code Audit & Pipeline Consistency Fix
+
+**Date**: 2026.05.06  
+**Version**: SelectPaper v28  
+**Focus**: 코드 점검, 누락 수정, 파이프라인 일관성 정리
+
+### Goal
+
+v28의 목표는 새로운 기능을 추가하는 것이 아니라, v23부터 v27까지 진행된 수정 중 실제 코드에 반영되지 않았거나 충돌 가능성이 있는 부분을 점검하고 정리하는 것이다.
+
+앞선 버전들에서 장르 판단, 한글 조판, 다단 레이아웃, heading typography, 명조/고딕 혼용 등 여러 구조가 추가되었기 때문에, v28에서는 이 기능들이 서로 충돌하지 않도록 코드 수준의 사각지대를 정리한다.
+
+---
+
+### Problem
+
+v27까지의 코드에는 기능적으로 중요한 흐름은 들어가 있었지만, 병합 과정에서 남은 구문 오류, dead code, 문서와 구현의 불일치, 프롬프트 간 설정 충돌이 일부 남아 있었다.
+
+대표적인 문제는 다음과 같다.
+
+- `colSetupBlock` 이중 할당
+- `userOverride` 조건문 중괄호 누락
+- handoff 문서와 다른 `analyzeText()` 입력 길이
+- 정의만 되고 사용되지 않는 `GENRE_PUB_PREF`
+- 정의만 되고 preamble에 삽입되지 않는 `footnoteBlock`
+- `hint`와 `hintState`의 중복 상태
+- `promptGuard` 일부만 전달되는 문제
+- preamble의 `\tolerance=400`과 refine prompt의 `\tolerance=9999` 충돌
+- refine 단계에서 실제 적용 여백이 아니라 원본 DB 여백을 참조하는 문제
+
+---
+
+### Design Shift
+
+v28은 기능 확장 버전이 아니라 정합성 정리 버전이다.
+
+기존 개발 흐름이 다음과 같았다면:
+
+```text
+v23–v27
+기능 추가 / 조판 안정화 / 장르 로직 개선
+```
+
+v28은 다음 역할을 한다.
+
+```text
+v28
+구현 점검 / 누락 반영 / 충돌 제거 / 유지보수성 개선
+```
+
+즉, 새로운 스타일을 만드는 것이 아니라 앞선 기능들이 실제 코드에서 안정적으로 작동하도록 연결 상태를 정리한다.
+
+---
+
+### Changes
+
+#### Syntax Cleanup
+
+`colSetupBlock`에 이중 할당이 남아 있던 문제를 수정했다.
+
+기존 문제:
+
+```text
+colSetupBlock = colSetupBlock =
+```
+
+수정 후에는 불필요한 중복 할당을 제거했다.
+
+또한 `userOverride` 조건문에서 누락된 중괄호를 보완해 구문 오류 가능성을 제거했다.
+
+---
+
+#### analyzeText Slice Alignment
+
+handoff 문서에는 `analyzeText()`가 200자 기준으로 작동한다고 정리되어 있었지만, 실제 코드에는 300자 slice가 남아 있었다.
+
+v28에서는 이를 200자로 수정했다.
+
+다만 `semanticRerank()`의 300자 slice는 유지했다.
+
+이유는 다음과 같다.
+
+```text
+analyzeText:
+빠른 장르 / 구조 추정용 → 짧게 유지
+
+semanticRerank:
+후보 간 비교와 문맥 판단 필요 → 더 긴 맥락 유지
+```
+
+---
+
+#### Dead Code Removal
+
+사용되지 않는 코드 두 가지를 제거했다.
+
+- `GENRE_PUB_PREF`
+- `footnoteBlock`
+
+`GENRE_PUB_PREF`는 정의되어 있었지만 실제 후보 필터링 로직과 연결되어 있지 않았다.
+
+장르 / 출판 형태 선호는 v27의 후보 pool filtering에서 이미 처리되므로, 혼동을 줄이기 위해 제거했다.
+
+`footnoteBlock` 역시 정의만 되어 있고 preamble에 실제로 삽입되지 않았기 때문에 제거했다.
+
+---
+
+#### State Simplification
+
+기존에는 장르 선택 상태로 `hint`와 `hintState`가 동시에 존재했다.
+
+두 값은 항상 같은 값을 유지해야 했기 때문에 불필요한 중복이었다.
+
+v28에서는 `hintState`를 제거하고 `hint` 하나로 통일했다.
+
+이를 통해 상태 동기화 오류 가능성을 줄이고, dropdown 처리 로직을 단순화했다.
+
+---
+
+#### Typography Guard Fix
+
+TYPO_BASE의 `promptGuard`는 6개 항목으로 구성되어 있었지만, 실제 프롬프트에는 `.slice(0,3)` 때문에 앞의 3개만 전달되고 있었다.
+
+v28에서는 이 제한을 제거해 전체 `promptGuard`가 전달되도록 수정했다.
+
+이 변경은 기본 타이포그래피 가드레일이 의도한 범위만큼 적용되도록 하기 위한 것이다.
+
+---
+
+#### Refine Prompt Consistency
+
+preamble에서는 한글 조판 안정성을 위해 다음 값을 사용하고 있었다.
+
+```latex
+\tolerance=400
+```
+
+그러나 refine prompt에는 여전히 다음 지시가 남아 있었다.
+
+```latex
+\tolerance=9999
+```
+
+이 두 값은 서로 충돌한다.
+
+`\tolerance=9999`는 지나치게 느슨한 줄나눔을 허용해 한글 조판에서 불균일한 자간이나 고립된 어절 문제를 다시 만들 수 있다.
+
+v28에서는 refine prompt도 `\tolerance=400`으로 통일했다.
+
+---
+
+#### Applied Margin State
+
+기존 refine prompt는 여백 기준으로 원본 DB 값인 `p.m.상`, `p.m.하`, `p.m.안`, `p.m.밖`을 사용했다.
+
+하지만 실제 생성에서는 `applyTextCorrections()` 이후 보정된 여백값이 적용될 수 있다.
+
+이 경우 refine 단계가 실제 출력에 적용된 값이 아니라 원본 DB 값을 기준으로 수정하게 되어 결과가 어긋날 수 있다.
+
+v28에서는 `appliedMargins` state를 추가해, 실제 생성에 사용된 여백값을 저장하고 refine prompt에서 이를 참조하도록 수정했다.
+
+---
+
+### Problem / Solution
+
+| Problem | Cause | Solution |
+|---|---|---|
+| `colSetupBlock` 이중 할당 | 병합 과정에서 중복 코드가 남음 | 중복 할당 제거 |
+| 조건문 구문 오류 가능성 | `userOverride` else 블록 닫힘 누락 | 중괄호 구조 정리 |
+| 문서와 코드 불일치 | `analyzeText()`가 300자 slice 유지 | 200자로 수정 |
+| 사용되지 않는 장르 선호 상수 | `GENRE_PUB_PREF`가 실제 로직과 미연결 | dead code 제거 |
+| 사용되지 않는 footnote block | 정의만 되고 preamble에 삽입되지 않음 | dead code 제거 |
+| 장르 상태 중복 | `hint`와 `hintState`가 동일 역할 | `hint` 하나로 통일 |
+| promptGuard 일부만 전달 | `.slice(0,3)` 적용 | 전체 guard 전달 |
+| refine 조판 설정 충돌 | preamble은 400, refine은 9999 | `\tolerance=400`으로 통일 |
+| refine 여백 기준 불일치 | 원본 DB margin 사용 | `appliedMargins` 기준으로 변경 |
+
+---
+
+### Impact
+
+- 코드 구문 안정성 향상
+- 문서와 실제 구현의 불일치 감소
+- dead code 제거로 유지보수성 개선
+- 장르 선택 상태 관리 단순화
+- TYPO_BASE 가드레일 적용 범위 정상화
+- 한글 조판 설정이 preamble과 refine에서 일관되게 유지됨
+- refine 단계가 실제 적용된 여백값을 기준으로 작동
+- 앞선 v23–v27 수정사항의 실사용 안정성 향상
+
+---
+
+### Notes
+
+v28은 눈에 보이는 디자인 결과를 새롭게 바꾸는 버전이 아니다.
+
+대신 이전 버전에서 추가된 기능들이 코드 안에서 실제로 일관되게 작동하는지 점검하고, 충돌하거나 누락된 부분을 정리한 안정화 버전이다.
+
+따라서 v28의 핵심은 다음과 같다.
+
+```text
+feature expansion
+→ implementation audit
+→ consistency fix
+```
