@@ -3,6 +3,54 @@
 
 All notable changes to SelectPaper are documented in this file.
 
+## v26 — Context-Based Genre Detection & Layout Safety Fix
+
+### Added
+
+- Added context-based genre detection signals to `analyzeText()`.
+- Added `structure` and `pub` fields to better distinguish narrative, essay, interview, list-based, and exhibition-style texts.
+- Added genre-to-publication-type preference mapping.
+- Added negative prompt constraints to prevent single-keyword genre misclassification.
+- Added layout safety check for body/note split layouts.
+
+### Changed
+
+- Changed genre matching from single keyword influence to multi-signal judgment.
+- Updated semantic rerank to consider:
+  - writing style
+  - text structure
+  - publication type
+  - genre confidence
+  - layout suitability
+- Adjusted genre hint behavior so selected genres prefer matching publication types.
+- Updated body/note split handling so note columns are only used when actual note content exists.
+- Changed unsafe side-note layouts to downgrade into regular multi-column or single-column layouts when no note content is provided.
+
+### Improved
+
+- Improved consistency between selected genre and generated layout.
+- Reduced cases where “문학” selection produces magazine-like layouts.
+- Reduced misclassification caused by isolated words such as “전시”.
+- Improved layout safety for texts without side notes.
+- Improved editorial appropriateness by using neutral layouts when genre confidence is low.
+
+### Fixed
+
+- Fixed issue where a single keyword could dominate genre selection.
+- Fixed issue where literature-like texts could be matched with magazine/journal-style layouts.
+- Fixed issue where body text appeared only on half of the page due to unnecessary body/note split.
+- Fixed issue where normal `\footnote{}` content was moved into side columns.
+- Fixed issue where `gray!10` or other LaTeX color strings appeared in the visible body text.
+- Removed unsafe use of `\colorbox`, `\fbox`, `\color`, `\textcolor`, and `xcolor`.
+
+### Notes
+
+- v26 focuses on preventing semantic matching failure caused by shallow keyword matching.
+- The goal is not to make genre detection more aggressive, but to make it more cautious and context-aware.
+- If genre confidence is low, the system should prefer a neutral editorial layout over a strongly genre-specific style.
+
+ ---
+
 ## v25 — Heading Typography System & Prompt Compression
 
 ### Added
