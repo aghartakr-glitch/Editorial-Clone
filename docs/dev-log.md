@@ -1550,3 +1550,266 @@ v26은 새로운 시각 스타일을 추가한 버전이 아니라, 의미 이�
 핵심은 “더 강한 장르 판단”이 아니라 **더 조심스러운 장르 판단**이다.
 
 장르 확신이 낮은 경우에는 잘못된 강한 스타일을 적용하기보다, 중립적인 에디토리얼 레이아웃을 선택하는 것이 더 안전하다는 방향으로 수정되었다.
+
+---
+
+## v27 — Genre Hint Priority & Mixed Typeface Stabilization
+
+**Date**: 2026.05.06  
+**Version**: SelectPaper v27  
+**Focus**: 장르 선택 우선 구조 및 명조/고딕 혼용 안정화
+
+### Goal
+
+v27의 목표는 자동 장르 감지와 사용자가 직접 선택한 장르를 명확히 분리하는 것이다.
+
+장르를 선택하지 않은 경우에는 기존처럼 텍스트 내용을 읽고, 문맥을 기반으로 장르와 스타일을 추정하는 것이 맞다.
+
+하지만 사용자가 특정 장르를 선택한 경우에는 그 장르에서 오는 스타일 방향이 우선되어야 한다.
+
+즉, v27에서는 다음 두 흐름을 분리한다.
+
+```text
+장르 미선택:
+내용 이해 → 장르 추정 → 스타일 선택
+
+장르 선택:
+선택 장르 우선 → 해당 장르 안에서 내용에 맞는 스타일 선택
+```
+
+또한 현재 가능한 명조/고딕 혼용 구조를 확인하고, 제목과 본문에서 서체가 안정적으로 분리 적용되도록 보완한다.
+
+---
+
+### Problem
+
+v26까지는 장르 오분류를 줄이기 위해 문맥 기반 장르 판단을 강화했다.
+
+하지만 이 과정에서 사용자가 장르를 직접 선택한 경우에도 내용 중심 semantic matching이 강하게 작동할 수 있었다.
+
+예를 들어 사용자가 “문학”을 선택했는데, 본문 안의 특정 주제나 구조가 잡지/비평지 후보와 더 잘 맞는다고 판단되면, 결과가 문학 단행본보다는 잡지형 레이아웃에 가까워질 수 있었다.
+
+이는 자동 감지 상태에서는 장점이지만, 사용자가 명시적으로 장르를 선택한 상황에서는 사용자 의도를 약화시키는 문제가 된다.
+
+---
+
+### Cause
+
+기존 구조의 문제는 두 가지다.
+
+#### 1. 장르 hint가 단순 점수 보정으로만 작동
+
+기존에는 `scoreKw()` 내부에서 장르 hint가 가산점으로만 적용되었다.
+
+```text
+content score + genre bonus
+```
+
+하지만 내용 매칭 점수가 충분히 높으면, 장르 보너스가 쉽게 묻힐 수 있었다.
+
+즉, 사용자가 장르를 선택했더라도 후보군 자체가 제한되지 않았기 때문에 전체 DB 안에서 다른 장르가 다시 올라올 수 있었다.
+
+---
+
+#### 2. semanticRerank가 장르 hint를 알지 못함
+
+기존 `semanticRerank()`는 후보들의 내용과 디자인 정보를 비교했지만, 사용자가 어떤 장르를 선택했는지는 직접 전달받지 않았다.
+
+그 결과 semantic rerank 단계에서 다시 내용 중심 선택이 강하게 작동할 수 있었다.
+
+---
+
+### Design Shift
+
+v27에서는 장르 hint의 역할을 단순 가산점에서 후보군 제한 기준으로 바꾼다.
+
+기존 구조:
+
+```text
+전체 DB
+↓
+content scoring + genre bonus
+↓
+semantic rerank
+↓
+final reference
+```
+
+변경 후 구조:
+
+```text
+장르 선택 있음:
+DB
+↓
+genre / pub_type pool filtering
+↓
+content scoring within filtered pool
+↓
+semantic rerank with selected genre
+↓
+final reference
+
+장르 선택 없음:
+전체 DB
+↓
+context-based content scoring
+↓
+semantic rerank without genre constraint
+↓
+final reference
+```
+
+이 구조에서는 사용자가 장르를 선택하면 시스템은 먼저 그 장르 후보 안으로 들어간 뒤, 그 안에서 내용과 가장 잘 맞는 레퍼런스를 찾는다.
+
+---
+
+### Changes
+
+#### Genre-First Candidate Filtering
+
+사용자가 장르를 선택한 경우, 전체 DB를 바로 scoring하지 않고 먼저 장르 후보군을 만든다.
+
+필터 기준은 다음을 함께 사용한다.
+
+- `g`
+- `pub_type`
+- genre preference mapping
+
+예:
+
+```text
+문학 선택
+→ 문학 / 문학 단행본 / 단행본 계열 후보 우선
+
+전시 선택
+→ 전시 도록 / 전시 연계 출판 후보 우선
+
+잡지 선택
+→ 잡지·저널 / 비평지 계열 후보 우선
+```
+
+필터된 후보가 너무 적은 경우에는 추천 실패를 막기 위해 전체 DB fallback을 허용한다.
+
+```text
+filtered candidates < 5
+→ fallback to full DB
+```
+
+---
+
+#### scoreKw Responsibility Change
+
+`scoreKw()`는 더 이상 장르 hint를 강한 가산점으로 처리하지 않는다.
+
+v27에서는 장르 선택 여부를 `run()` 단계에서 먼저 처리하고, `scoreKw()`는 주어진 후보 pool 안에서 내용 기반 점수를 계산하는 역할로 정리된다.
+
+즉, 역할이 다음처럼 분리된다.
+
+```text
+run():
+장르 선택 여부에 따라 후보 pool 결정
+
+scoreKw():
+주어진 후보 pool 안에서 내용/summary/layout/typography score 계산
+```
+
+---
+
+#### semanticRerank Hint Awareness
+
+`semanticRerank()`에 `hint` 파라미터를 추가했다.
+
+장르 선택이 있는 경우, rerank prompt는 다음 원칙을 따른다.
+
+```text
+이 후보들은 사용자가 선택한 장르를 기준으로 필터링된 후보들이다.
+선택한 장르의 스타일 정체성을 유지하면서,
+그 안에서 입력 텍스트와 가장 잘 맞는 레퍼런스를 선택하라.
+```
+
+장르 선택이 없는 경우에는 기존 v26의 문맥 기반 자동 감지 원칙을 유지한다.
+
+```text
+단일 키워드만으로 장르를 판단하지 말고,
+전체 문맥과 구조를 기준으로 장르와 스타일을 선택하라.
+```
+
+---
+
+#### Manual Genre vs Automatic Detection
+
+v27에서 가장 중요한 변경은 자동 감지와 수동 선택의 의미를 분리한 것이다.
+
+| Mode | Behavior |
+|---|---|
+| 장르 미선택 | 전체 DB에서 텍스트 내용을 읽고 장르와 스타일 자동 추정 |
+| 장르 선택 | 선택한 장르 후보 안에서 내용과 가장 잘 맞는 스타일 선택 |
+
+이로써 사용자가 장르를 선택한 경우에는 “사용자가 원하는 장르 스타일”이 더 확실히 반영된다.
+
+---
+
+#### Mixed Typeface Stabilization
+
+현재 코드에는 명조와 고딕을 함께 사용할 수 있는 구조가 있다.
+
+혼합 레이아웃에서는 본문은 명조 계열, 제목은 고딕 계열로 나누는 방식이 가능하다.
+
+기존에는 다음 구조가 존재했다.
+
+```text
+body → serif / rmfamily
+heading → sans-serif / sffamily
+```
+
+하지만 heading command 자체에는 서체 전환이 포함되어 있지 않아, AI가 직접 `\sffamily`를 추가해야 했다.
+
+v27에서는 heading command 안에 서체 전환을 포함시켰다.
+
+예:
+
+```latex
+\newcommand{\hone}{\sffamily\fontsize{20pt}{25pt}\selectfont}
+\newcommand{\htwo}{\sffamily\fontsize{14.5pt}{20.3pt}\selectfont}
+\newcommand{\hthree}{\sffamily\fontsize{11pt}{17.6pt}\selectfont}
+\newcommand{\bodyf}{\rmfamily\fontsize{9pt}{14.9pt}\selectfont}
+```
+
+이제 AI는 `{\hone 제목}`을 사용하면 제목을 고딕 계열로 출력하고, `\bodyf`를 사용해 본문 명조로 안정적으로 복귀할 수 있다.
+
+---
+
+### Problem / Solution
+
+| Problem | Cause | Solution |
+|---|---|---|
+| 장르를 선택해도 다른 장르 스타일이 나옴 | 장르 hint가 단순 점수 보정으로만 작동 | 장르 선택 시 후보 pool을 먼저 필터링 |
+| 내용 점수가 장르 선택을 덮어씀 | 전체 DB에서 content scoring이 먼저 작동 | 선택 장르 후보 안에서만 content scoring |
+| semantic rerank가 장르 선택을 모름 | `hint`가 rerank에 전달되지 않음 | `semanticRerank(hint)` 구조 추가 |
+| 자동 감지와 수동 장르 선택의 역할이 섞임 | 두 모드가 같은 pipeline을 공유 | 장르 선택 여부에 따라 pipeline 분기 |
+| 명조/고딕 혼용이 불안정함 | heading command에 font family 전환 없음 | heading command 내부에 `\sffamily` 포함 |
+| 제목 후 본문 서체 복귀가 불안정함 | 본문 복귀 command 없음 | `\bodyf` command 추가 |
+
+---
+
+### Impact
+
+- 장르 선택 시 사용자의 의도가 더 강하게 반영됨
+- 문학 선택 시 문학 계열 후보 안에서 스타일을 찾도록 개선
+- 자동 감지 모드는 기존처럼 문맥 기반 판단 유지
+- 내용 중심 추천과 사용자 장르 선택 사이의 충돌 감소
+- semantic rerank와 genre hint의 연결 강화
+- 명조/고딕 혼용 레이아웃의 안정성 향상
+- 제목과 본문 사이의 서체 전환이 더 예측 가능해짐
+
+---
+
+### Notes
+
+v27은 장르 판단을 더 강하게 자동화한 버전이 아니라, 자동 판단과 사용자 선택의 역할을 분리한 버전이다.
+
+장르를 선택하지 않은 경우에는 시스템이 내용을 이해해 적합한 장르와 스타일을 찾는다.
+
+반대로 사용자가 장르를 선택한 경우에는, 그 선택을 단순 참고가 아니라 스타일 방향을 결정하는 제약 조건으로 사용한다.
+
+이 변화는 추천 시스템의 자율성과 사용자의 의도 반영 사이의 균형을 맞추기 위한 것이다.
