@@ -5,6 +5,71 @@ All notable changes to SelectPaper are documented in this file.
 
 ---
 
+## v29 — Semantic Routing & Evaluation Control
+
+### Added
+
+- Added `topic / textForm / pubType` analysis to separate subject, writing form, and publication type.
+- Added `exhibitEvidence` and `riskyKeywords` fields to reduce single-keyword genre mistakes.
+- Added separated score fields:
+  - `contentScore`
+  - `genreScore`
+  - `pubTypeScore`
+  - `layoutScore`
+  - `diversityScore`
+- Added `testMode` options:
+  - `normal`
+  - `lengthCompare`
+  - `genreCompare`
+  - `lockedStyle`
+- Added `inferAlignment()` to decide text alignment from DB/style context.
+- Added `runMeta` log state with expanded generation metadata.
+- Added Run Log panel in the UI.
+
+### Changed
+
+- Changed genre selection from keyword-heavy matching to multi-axis semantic matching.
+- Changed candidate construction from simple top candidates to mixed candidate groups:
+  - genre match
+  - publication type match
+  - content similarity
+  - layout diversity
+- Changed fallback behavior:
+  - before: low filtered count → full DB fallback
+  - after: primary match → related genre/type expansion → full DB only as last resort
+- Changed `semanticRerank()` to return rejected candidates and rejection reasons.
+- Changed alignment handling so Claude follows `selectedAlignment` instead of choosing freely.
+- Changed refine prompt to preserve locked alignment and layout decisions.
+
+### Improved
+
+- Improved genre hint behavior by applying hint scores directly in scoring.
+- Improved genre comparison by penalizing repeated samples in `genreCompare`.
+- Improved length comparison by locking style values in `lengthCompare`.
+- Improved style consistency tracking with `styleDrift` and `alignmentDrift`.
+- Improved footnote consistency by fixing footnote formatting in LaTeX preamble.
+- Improved heading stability by adding `Needspace`-based heading protection.
+- Improved logging by recording selected reasons, rejected candidates, scores, alignment, and refine status.
+
+### Fixed
+
+- Fixed issue where the same or very similar sample could repeat across different genre hints.
+- Fixed issue where content keyword similarity dominated genre selection.
+- Fixed issue where “전시” or similar words could overly influence publication type.
+- Fixed issue where alignment was not explicitly controlled before LaTeX generation.
+- Fixed issue where footnote indentation depended too much on default LaTeX behavior.
+- Fixed issue where headings could separate from following body text near page breaks.
+
+### Notes
+
+- v29 introduces a stronger semantic routing layer.
+- v29 does not modify DB items.
+- Alignment is currently inferred because DB entries do not yet contain explicit `alignment` fields.
+- PDF warning detection is still limited by the browser/Overleaf workflow.
+- Test modes are available in UI, but automated batch testing is not yet implemented.
+
+---
+
 ## v28 — Code Audit & Pipeline Consistency Fix
 
 ### Added
