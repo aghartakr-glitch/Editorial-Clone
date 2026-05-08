@@ -2023,3 +2023,278 @@ feature expansion
 → implementation audit
 → consistency fix
 ```
+
+---
+# v29 — Semantic Routing & Evaluation Control
+
+**Date:** 2026.05.08  
+**Version:** SelectPaper v29  
+**Focus:** 의미 분석 강화, 장르 비교 안정화, 테스트 모드 추가, 조판 제어 개선
+
+---
+
+## Goal
+
+v29의 목표는 Claude가 본문 키워드 하나에 과하게 반응하거나, 장르를 바꿔도 같은 샘플을 반복 선택하는 문제를 줄이는 것이다.
+
+또한 단문/중문/장문 테스트, 장르 비교 테스트, 특정 스타일 고정 테스트를 구분할 수 있도록 `testMode`를 추가해 평가 가능성을 높인다.
+
+핵심 목표는 다음과 같다.
+
+- 키워드 중심 장르 판단 완화
+- 장르별 샘플 반복 문제 개선
+- 의미 분석을 더 구조화
+- 테스트 목적에 따라 style lock 여부 분리
+- 정렬 방식, 각주, heading 조판을 더 안정적으로 제어
+- 선택 이유와 탈락 이유를 로그로 확인 가능하게 만들기
+
+---
+
+## Problem
+
+v28까지는 기본적인 장르 판별과 semantic rerank가 있었지만, 여전히 다음 문제가 남아 있었다.
+
+- 같은 본문을 넣고 장르만 바꿔도 유사한 샘플이 반복됨
+- 본문 키워드 점수가 장르 힌트보다 강하게 작동함
+- “전시”, “작품”, “작가” 같은 단어가 전체 장르 판단을 흔들 수 있음
+- 후보가 부족하면 전체 DB로 바로 fallback되어 장르 비교가 흐려짐
+- 단문/중문/장문 테스트와 일반 생성이 명확히 분리되지 않음
+- 정렬 방식이 DB/장르 특성보다 Claude 판단에 의존할 수 있음
+- 선택 이유는 있으나 탈락 이유와 점수 구조가 충분히 보이지 않음
+
+---
+
+## Design Shift
+
+v29는 단순 기능 추가가 아니라 **선택 구조의 재설계**에 가깝다.
+
+기존 흐름이 다음과 같았다면:
+
+키워드 후보 → 의미 판단 → 스타일 선택
+
+v29에서는 다음 흐름으로 바뀐다.
+
+의미 분석 → 장르/출판형식 후보 분리 → 점수 분리 → 혼합 후보 구성 → semantic rerank → 로그 기록
+
+또한 테스트 목적을 명확히 분리한다.
+
+normal  
+일반 생성
+
+lengthCompare  
+단문/중문/장문 비교, 스타일 고정
+
+genreCompare  
+같은 본문으로 장르별 차이 비교, 스타일 고정하지 않음
+
+lockedStyle  
+특정 스타일 고정 테스트
+
+---
+
+## Changes
+
+### Semantic Analysis Expansion
+
+기존의 단순 장르/출판형식 분석을 확장했다.
+
+새로운 분석 축은 다음과 같다.
+
+- `topic`: 글의 주제
+- `textForm`: 글의 형식
+- `pubType`: 출판물 형식
+
+또한 다음 필드를 추가했다.
+
+- `exhibitEvidence`
+- `riskyKeywords`
+
+이를 통해 “전시”라는 단어 하나만으로 전시도록을 선택하지 않고, 작품 목록, 전시 기간, 작가 약력, 도판 캡션 등 추가 근거를 확인할 수 있게 했다.
+
+---
+
+### Score Separation
+
+기존 단일 점수 구조를 분리 점수 구조로 바꿨다.
+
+분리된 점수는 다음과 같다.
+
+- `contentScore`
+- `genreScore`
+- `pubTypeScore`
+- `layoutScore`
+- `diversityScore`
+
+이제 장르 힌트가 단순 필터로만 작동하지 않고 실제 점수 계산에도 반영된다.
+
+---
+
+### Candidate Pool Improvement
+
+기존에는 상위 키워드 후보 중심으로 후보가 구성되었다.
+
+v29에서는 후보를 다음 기준으로 섞어서 구성한다.
+
+- 장르 일치 후보
+- 출판형식 일치 후보
+- 내용 유사도 후보
+- 레이아웃 다양성 후보
+
+후보가 부족할 경우에도 바로 전체 DB로 돌아가지 않고, 관련 장르나 관련 출판형식으로 먼저 확장한다.
+
+---
+
+### Genre Compare Improvement
+
+`genreCompare` 모드에서는 같은 본문으로 장르만 바꿔 테스트한다.
+
+이때 같은 샘플이 반복되면 감점한다.
+
+감점 기준은 다음과 같다.
+
+- 이전 선택 샘플과 동일한 경우
+- 같은 `layout_type` 반복
+- 같은 판형 반복
+- 같은 단수 반복
+
+다만 해당 장르에서 유일하게 적절한 후보라면 선택 가능하며, 그 이유를 로그에 남긴다.
+
+---
+
+### Test Mode Addition
+
+v29에서는 `testMode`를 추가했다.
+
+- `normal`: 일반 생성
+- `lengthCompare`: 단문/중문/장문 비교
+- `genreCompare`: 장르 비교
+- `lockedStyle`: 특정 스타일 고정
+
+`lengthCompare`에서는 스타일을 고정하고, `genreCompare`에서는 스타일을 고정하지 않는다.
+
+이를 통해 일반 생성과 평가용 테스트가 섞이는 문제를 줄였다.
+
+---
+
+### Alignment Control
+
+정렬 방식도 Claude가 임의로 정하지 않도록 개선했다.
+
+선택 방식은 다음과 같다.
+
+- DB에 alignment 정보가 있으면 사용
+- 없으면 장르, 출판형식, 단 구성, 단폭으로 추론
+- 최종 LaTeX 생성 전에 `selectedAlignment`로 고정
+- refine 단계에서도 alignment 유지
+
+로그에는 다음 값이 남는다.
+
+- `selectedAlignment`
+- `alignmentSource`
+- `alignmentReason`
+- `alignmentDrift`
+
+---
+
+### Footnote Control
+
+각주 스타일을 Claude 프롬프트가 아니라 LaTeX preamble에서 고정했다.
+
+정리된 항목은 다음과 같다.
+
+- 각주 번호 위치
+- 번호 뒤 간격
+- 각주 본문 들여쓰기
+- 각주 크기
+
+이를 통해 각주 전체가 들여쓰기되는 문제를 줄였다.
+
+---
+
+### Heading Stability
+
+heading과 다음 본문이 떨어지는 문제를 줄이기 위해 `Needspace` 기반 규칙을 추가했다.
+
+소제목이 페이지 하단에 혼자 남지 않도록 heading placement 규칙도 강화했다.
+
+---
+
+### Run Log Panel
+
+실행 결과를 확인할 수 있는 Run Log 패널을 추가했다.
+
+기록되는 주요 항목은 다음과 같다.
+
+- `runId`
+- `selectedStyleId`
+- `testMode`
+- `hint`
+- `topic`
+- `textForm`
+- `pubType`
+- `riskyKeywords`
+- `selectedAlignment`
+- 각 점수 항목
+- 선택 이유
+- 탈락 후보
+- 탈락 이유
+- `styleDrift`
+- `alignmentDrift`
+- refine 적용 여부
+
+---
+
+## Problem / Solution
+
+| Problem | Cause | Solution |
+|---|---|---|
+| 장르를 바꿔도 같은 샘플 반복 | 본문 키워드 유사도가 과도하게 강함 | 점수 분리 및 `genreCompare` 감점 추가 |
+| “전시” 단어가 장르 판단을 흔듦 | 단일 키워드가 강한 신호처럼 작동 | `riskyKeywords`, `exhibitEvidence` 추가 |
+| 후보 부족 시 전체 DB로 바로 fallback | 장르 필터가 쉽게 무력화됨 | related genre/pubType 확장 후 fallback |
+| 단문/중문/장문 테스트 기준 불명확 | 일반 생성과 평가 모드가 섞임 | `testMode` 추가 |
+| 장르 비교에서 스타일 고정 위험 | styleLock이 모든 테스트에 적용될 수 있음 | `lengthCompare`와 `genreCompare` 분리 |
+| 정렬 방식이 불안정함 | Claude가 LaTeX 생성 중 임의 판단 가능 | `selectedAlignment` 확정 후 전달 |
+| 각주 들여쓰기 불안정 | LaTeX 기본 각주 스타일 의존 | preamble에서 각주 형식 고정 |
+| 선택 결과 검증 어려움 | 선택 이유만 있고 탈락 이유 부족 | rejected 후보와 탈락 이유 로그 추가 |
+
+---
+
+## Impact
+
+- 장르 힌트가 실제 스타일 선택에 더 강하게 반영됨
+- 같은 본문으로 장르를 바꿨을 때 샘플 반복 가능성이 줄어듦
+- “전시” 같은 단일 키워드 오분류 가능성이 줄어듦
+- 단문/중문/장문 비교 테스트가 더 안정적으로 가능해짐
+- 장르 비교 테스트에서 장르별 차이를 더 잘 볼 수 있음
+- 정렬 방식이 장르와 DB 특성에 맞게 결정됨
+- 각주와 heading 조판 안정성이 개선됨
+- 실행 결과를 로그로 검증하기 쉬워짐
+
+---
+
+## Notes
+
+v29는 단순한 코드 정리 버전이 아니다.
+
+v28이 코드 감사와 정합성 정리였다면, v29는 **선택 로직과 평가 구조를 개선한 버전**이다.
+
+핵심 변화는 다음과 같다.
+
+keyword-heavy matching  
+→ semantic routing
+
+single score  
+→ separated scoring
+
+implicit test behavior  
+→ explicit testMode
+
+Claude free decision  
+→ locked system decision + logged reasoning
+
+남은 한계는 다음과 같다.
+
+- PDF warning 자동 추적은 아직 Overleaf/log 확인에 의존함
+- testMode는 구현되었지만 자동 반복 테스트 루프는 아직 없음
+- DB에 alignment 필드가 없어 현재는 추론 기반임
+- 일부 장르 후보가 적으면 같은 샘플 반복이 완전히 사라지지는 않음
